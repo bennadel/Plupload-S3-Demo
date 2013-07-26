@@ -1,0 +1,3 @@
+
+# Ignore the config file  (where I keep my private Amazon S3 configuration data).
+s3.config

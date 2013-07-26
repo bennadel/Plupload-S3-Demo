@@ -1,0 +1,41 @@
+
+div.uploader {
+	background-color: #FAFAFA ;
+	border: 1px solid #CCCCCC ;
+	height: 100px ;
+	width: 300px ;
+}
+
+div.uploader a {
+	display: block ;
+	height: 100px ;
+	text-align: center ;
+	text-decoration: none ;
+}
+
+div.uploader span.label {
+	display: block ;
+	padding: 27px 0px 0px 0px ;
+	text-decoration: underline ;
+}
+
+
+div.uploader span.standby {
+	color: #999999 ;
+	display: block ;
+	padding: 12px 0px 0px 0px ;
+}
+
+div.uploader span.progress {
+	color: #999999 ;
+	display: none ;
+	padding: 12px 0px 0px 0px ;
+}
+
+div.uploader.uploading span.standby {
+	display: none ;
+}
+
+div.uploader.uploading span.progress {
+	display: block ;
+}

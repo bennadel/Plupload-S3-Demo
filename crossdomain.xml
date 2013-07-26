@@ -1,0 +1,15 @@
+<!--
+	In order for the HTML5 form to work, your Amazon S3 bucket needs to have CORS policy in place.
+	This way, the FORM can post cross-domain requests.
+-->
+<CORSConfiguration>
+	<CORSRule>
+		<AllowedOrigin>http://local.bennadel.com</AllowedOrigin>
+		<AllowedMethod>POST</AllowedMethod>
+		<AllowedHeader>*</AllowedHeader>
+	</CORSRule>
+	<CORSRule>
+		<AllowedOrigin>*</AllowedOrigin>
+		<AllowedMethod>GET</AllowedMethod>
+	</CORSRule>
+</CORSConfiguration>
