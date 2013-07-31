@@ -1,21 +1,12 @@
 <cfscript>
 	
-	// Plupload exmaple: https://github.com/moxiecode/plupload/blob/master/examples/jquery/s3.php
-	
+
+	// Include our ColdFusion 9 -> ColdFusion 10 migration script so 
+	// that I can work on this at home (CF10) and in the office (CF9).
+	include "cf10-migration.cfm";
 
 	// Include the Amazon Web Service (AWS) S3 credentials.
 	include "aws-credentials.cfm";
-
-	// Set up the Success url that Amazon S3 will redirect to if the
-	// FORM POST has been submitted successfully.
-	// ---
-	// NOTE: If the form post fails, Amazon will present an error
-	// message - there is no error-based redirect. We'll have to look
-	// for this condition in the Plupload error handler.
-	successUrl = (
-		"http://" & cgi.server_name &
-		getDirectoryFromPath( cgi.script_name ) & "success.cfm"
-	);
 
 	// The expiration must defined in UCT time. Since the Plupload
 	// widget may be on the screen for a good amount of time, 
@@ -26,6 +17,13 @@
 	// NOTE: When formatting the UTC time, the hours must be in 24-
 	// hour time; therefore, make sure to use "HH", not "hh" so that
 	// your policy don't expire prematurely.
+	// ---
+	// NOTE: We are providing a success_action_status INSTEAD of a 
+	// success_action_redirect since we don't want the browser to try
+	// and redirect (won't be supported across all Plupload 
+	// environments). Instead, we'll get Amazon S3 to return the XML
+	// document for the successful upload. Then, we can parse teh 
+	// response locally.
 	policy = {
 		"expiration" = (
 			dateFormat( expiration, "yyyy-mm-dd" ) & "T" &
@@ -36,13 +34,10 @@
 				"bucket" = aws.bucket
 			}, 
 			{
-				"acl" = "public-read"
+				"acl" = "private"
 			},
-			//{
-			//	"success_action_redirect" = successUrl
-			//},
 			{
-				"success_action_status" = "201 Created"
+				"success_action_status" = "2xx"
 			},
 			[ "starts-with", "$key", "pluploads/" ],
 			[ "starts-with", "$Content-Type", "image/" ],
@@ -63,6 +58,12 @@
 	// The policy will be posted along with the FORM post as a
 	// hidden form field. Serialize it as JavaScript Object notation.
 	serializedPolicy = serializeJson( policy );
+
+	// When the policy is being serialized, ColdFusion will try to turn
+	// "201" into the number 201. However, we NEED this value to be a
+	// STRING. As such, we'll give the policy a non-numeric value and
+	// then convert it to the appropriate 201 after serialization.
+	serializedPolicy = replace( serializedPolicy, "2xx", "201" );
 
 	// Remove up the line breaks.
 	serializedPolicy = reReplace( serializedPolicy, "[\r\n]+", "", "all" );
@@ -145,6 +146,13 @@
 
 		</div>
 
+		<ul class="uploads">
+			<!--
+				Will be populated dynamically with LI/IMG tags by the
+				uploader success handler. 
+			-->
+		</ul>
+
 
 		<!-- Load and initialize scripts. -->
 		<script type="text/javascript" src="./assets/jquery/jquery-2.0.3.min.js"></script>
@@ -154,32 +162,41 @@
 			(function( $, plupload ) {
 
 
-				// Find and cache the DOM elements we'll be interacting with.
+				// Find and cache the DOM elements we'll be using.
 				var dom = {
 					uploader: $( "##uploader" ),
-					percent: $( "##uploader span.percent" )
+					percent: $( "##uploader span.percent" ),
+					uploads: $( "ul.uploads" )
 				};
 
 
+				// Instantiate the Plupload uploader. When we do this, 
+				// we have to pass in all of the data that the Amazon 
+				// S3 policy is going to be expecting. Also, we have 
+				// to pass in the policy :)
 				var uploader = new plupload.Uploader({
 
-					// Try to load the HTML5 engine and then, if that's 
+					// Try to load the HTML5 engine and then, if that's
 					// not supported, the Flash fallback engine.
+					// --
+					// NOTE: For Flash to work, you will have to upload
+					// the crossdomain.xml file to the root of your 
+					// Amazon S3 bucket.
 					runtimes: "html5,flash",
 
-					// The upload URL.
-					url: 'http://#aws.bucket#.s3.amazonaws.com/',
+					// The upload URL - our Amazon S3 bucket.
+					url: "http://#aws.bucket#.s3.amazonaws.com/",
 
 					// The ID of the drop-zone element.
 					drop_element: "uploader",
 
-					// To enable click-to-select-files, you can provide a
-					// browse button. We can use the same one as the drop
-					// zone.
+					// To enable click-to-select-files, you can provide
+					// a browse button. We can use the same one as the 
+					// drop zone.
 					browse_button: "selectFiles",
 
-					// For the Flash engine, we have to define the ID of
-					// the node into which Pluploader will inject the 
+					// For the Flash engine, we have to define the ID 
+					// of the node into which Pluploader will inject the 
 					// <OBJECT> tag for the flash movie.
 					container: "uploader",
 
@@ -187,17 +204,24 @@
 					// engine for browsers that don't support HTML5.
 					flash_swf_url: "./assets/plupload/js/plupload.flash.swf",
 
-					//unique_names: true,
+					// Needed for the Flash environment to work.
+					urlstream_upload: true,
 
-					// The name of the form-field that will hold the upload data.
+					// NOTE: I couldn't get unique names to work...
+					// unique_names: true,
+
+					// The name of the form-field that will hold the 
+					// upload data. Amason S3 will expect this form 
+					// field to be called, "file".
 					file_data_name: "file",
 
 					multipart: true,
 
+					// Pass through all the values needed by the Policy 
+					// and the authentication of the request.
 					multipart_params: {
-						"acl": "public-read",
-						// "success_action_redirect": "#htmlEditFormat( successUrl )#",
-						"success_action_status": "201 Created",
+						"acl": "private",
+						"success_action_status": "201",
 						"key": "pluploads/${filename}",
 						"Filename": "pluploads/${filename}",
 						"Content-Type": "image/*",
@@ -210,35 +234,59 @@
 				});
 
 
+				// Set up the event handlers for the uploader.
 				uploader.bind( "Init", handlePluploadInit );
 				uploader.bind( "Error", handlePluploadError );
 				uploader.bind( "FilesAdded", handlePluploadFilesAdded );
 				uploader.bind( "QueueChanged", handlePluploadQueueChanged );
 				uploader.bind( "UploadProgress", handlePluploadUploadProgress );
 				uploader.bind( "FileUploaded", handlePluploadFileUploaded );
+				uploader.bind( "StateChanged", handlePluploadStateChanged );
 				
-
+				// Initialize the uploader (it is only after the 
+				// initialization is complete that we will know which
+				// runtime load: html5 vs. Flash).
 				uploader.init();
 
 
+				// ------------------------------------------ //
+				// ------------------------------------------ //
+
+
+				// I handle the init event. At this point, we will know
+				// which runtime has loaded, and whether or not drag-
+				// drop functionality is supported.
 				function handlePluploadInit( uploader, params ) {
 
+					console.log( "Initialization complete." );
+
+					console.log( "Drag-drop supported:", !! uploader.features.dragdrop );
 
 				}
 
 
+				// I handle any errors raised during uploads.
 				function handlePluploadError() {
-					console.log( "Error" );
-					console.dir( arguments );
+					
+					console.log( "Error during upload." );
+
 				}
 
 
+				// I handle the files-added event. This is different
+				// that the queue-changed event. At this point, we 
+				// have an opportunity to reject files from the queue.
 				function handlePluploadFilesAdded() {
 
+					console.log( "Files selected." );
+
 				}
 
 
+				// I handle the queue changed event.
 				function handlePluploadQueueChanged( uploader ) {
+
+					console.log( "Files added to queue." );
 
 					if ( uploader.files.length && isNotUploading() ){
 
@@ -249,16 +297,52 @@
 				}
 
 
+				// I handle the upload progress event. This gives us
+				// the progress of the given file, NOT of the entire
+				// upload queue.
 				function handlePluploadUploadProgress( uploader, file ) {
+
+					console.log( "Upload progress:", file.percent );
+
+					dom.percent.text( file.percent );
+
 				}
 
 
+				// I handle the file-uploaded event. At this point, 
+				// the resource had been uploaded to Amazon S3 and
+				// we can tell OUR SERVER about the event.
 				function handlePluploadFileUploaded( uploader, file, response ) {
-					console.log( "File Uploaded" );
-					console.dir( response );
-					console.dir( arguments );
+
+					var resourceData = parseAmazonResponse( response.response );
+
+					var li = $( "<li><img /></li>" );
+					var img = li.find( "img" );
+
+					img.prop(
+						"src",
+						( "./success.cfm?key=" + resourceData.key )
+					);
+
+					dom.uploads.prepend( li );
+
 				}
 
+
+				// I handle the change in state of the uploader.
+				function handlePluploadStateChanged( uploader ) {
+
+					if ( isUploading() ) {
+
+						dom.uploader.addClass( "uploading" );
+
+					} else {
+
+						dom.uploader.removeClass( "uploading" );
+
+					}
+
+				}
 				
 
 				// I determine if the upload is currently inactive.
@@ -281,6 +365,29 @@
 
 				}
 
+
+				// When Amazon S3 returns a 201 reponse, it will provide
+				// an XML document with the values related to the newly
+				// uploaded Resource. This function extracts the two 
+				// values: Bucket and Key.
+				function parseAmazonResponse( response ) {
+
+					var result = {};
+					var pattern = /<(Bucket|Key)>([^<]+)<\/\1>/gi;
+					var matches = null;
+
+					while ( matches = pattern.exec( response ) ) {
+
+						var nodeName = matches[ 1 ].toLowerCase();
+						var nodeValue = matches[ 2 ];
+
+						result[ nodeName ] = nodeValue;
+
+					}
+
+					return( result );
+
+				}
 
 
 			})( jQuery, plupload );

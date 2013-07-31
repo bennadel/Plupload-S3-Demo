@@ -3,7 +3,7 @@ div.uploader {
 	background-color: #FAFAFA ;
 	border: 1px solid #CCCCCC ;
 	height: 100px ;
-	width: 300px ;
+	width: 476px ;
 }
 
 div.uploader a {
@@ -38,4 +38,36 @@ div.uploader.uploading span.standby {
 
 div.uploader.uploading span.progress {
 	display: block ;
+}
+
+ul.uploads {
+	list-style-type: none ;
+	margin: 16px 0px 16px 0px ;
+	padding: 0px 0px 0px 0px ;
+	width: 486px ;
+}
+
+ul.uploads:after {
+	clear: both ;
+	content: "" ;
+	display: block ;
+	height: 0px ;
+}
+
+ul.uploads li {
+	background-color: #FAFAFA ;
+	border: 1px solid #CCCCCC ;
+	border-radius: 3px 3px 3px 3px ;
+	float: left ;
+	height: 150px ;
+	margin: 10px 10px 0px 0px ;
+	width: 150px ;
+}
+
+ul.uploads img {
+	border-radius: 3px 3px 3px 3px ;
+	display: block ;
+	margin: 0px auto 0px auto ;
+	max-height: 150px ;
+	max-width: 150px ;
 }

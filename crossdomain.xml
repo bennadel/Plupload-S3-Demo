@@ -1,18 +1,16 @@
-<!--
-	In order for the HTML5 form to work, your Amazon S3 bucket needs to have CORS policy in place.
-	This way, the FORM can post cross-domain requests.
+<?xml version="1.0"?>
+<!DOCTYPE cross-domain-policy SYSTEM "http://www.macromedia.com/xml/dtds/cross-domain-policy.dtd">
+<cross-domain-policy>
+	<allow-access-from domain="local.bennadel.com" secure="false" />
+</cross-domain-policy>
+
+<!-- 
+	In order for the Flash runtime to be able to upload files across domains, we
+	need to uplaod this document to the root of the Amazon S3 bucket to which we 
+	will be uploading files. 
+
+	NOTE: Once uploaded, make sure that "Everyone" has Open/Download AND View 
+	permissions on the file; otherwise, you'll get a security error. Also, if you 
+	upload this file more than once, I have found that I need to RE-SAVE the 
+	permissions on the object (even if they already say Open/Download/View).
 -->
-<?xml version="1.0" encoding="UTF-8"?>
-<CORSConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-	<CORSRule>
-		<AllowedOrigin>*</AllowedOrigin>
-		<AllowedMethod>GET</AllowedMethod>
-		<MaxAgeSeconds>3000</MaxAgeSeconds>
-		<AllowedHeader>Authorization</AllowedHeader>
-	</CORSRule>
-	<CORSRule>
-		<AllowedOrigin>http://local.bennadel.com</AllowedOrigin>
-		<AllowedMethod>POST</AllowedMethod>
-		<AllowedHeader>*</AllowedHeader>
-	</CORSRule>
-</CORSConfiguration>
