@@ -1,36 +1,99 @@
 <cfscript>
 	
 	// Plupload exmaple: https://github.com/moxiecode/plupload/blob/master/examples/jquery/s3.php
-	// Amazon S3 blog post: http://aws.amazon.com/articles/1434?_encoding=UTF8&jiveRedirect=1
-
-
 	
+
+	// Include the Amazon Web Service (AWS) S3 credentials.
+	include "aws-credentials.cfm";
+
+	// Set up the Success url that Amazon S3 will redirect to if the
+	// FORM POST has been submitted successfully.
+	// ---
+	// NOTE: If the form post fails, Amazon will present an error
+	// message - there is no error-based redirect. We'll have to look
+	// for this condition in the Plupload error handler.
+	successUrl = (
+		"http://" & cgi.server_name &
+		getDirectoryFromPath( cgi.script_name ) & "success.cfm"
+	);
+
+	// The expiration must defined in UCT time. Since the Plupload
+	// widget may be on the screen for a good amount of time, 
+	// especially if this is a single-page app, we probably need to 
+	// put the expiration date into the future a good amount.
+	expiration = dateConvert( "local2utc", dateAdd( "d", 1, now() ) );
+
+	// NOTE: When formatting the UTC time, the hours must be in 24-
+	// hour time; therefore, make sure to use "HH", not "hh" so that
+	// your policy don't expire prematurely.
 	policy = {
-		"expiration" = "2014-01-01T00:00:00Z",
+		"expiration" = (
+			dateFormat( expiration, "yyyy-mm-dd" ) & "T" &
+			timeFormat( expiration, "HH:mm:ss" ) & "Z"
+		),
 		"conditions" = [ 
 			{
-				"bucket" = request.s3.bucket
+				"bucket" = aws.bucket
 			}, 
 			{
-				"acl" = "private"
+				"acl" = "public-read"
 			},
+			//{
+			//	"success_action_redirect" = successUrl
+			//},
 			{
-				"success_action_redirect" = ( "http://" & cgi.server_name & getDirectoryFromPath( cgi.script_name ) & "success.cfm" )
+				"success_action_status" = "201 Created"
 			},
-			{
-				"success_action_status" = "201"
-			},
-			[ "content-length-range", 0, 10485760 ],
-			[ "starts-with", "$name", "" ],
-			[ "starts-with", "$key", "form-uploads/" ],
+			[ "starts-with", "$key", "pluploads/" ],
 			[ "starts-with", "$Content-Type", "image/" ],
-			[ "starts-with", "$Filename", "" ]
+			[ "content-length-range", 0, 10485760 ], // 10mb
+
+			// The following keys are ones that Plupload will inject
+			// into the form-post across the various environments.
+			[ "starts-with", "$Filename", "pluploads/" ],
+			[ "starts-with", "$name", "" ]
 		]
 	};
 
 
-	postPolicy = "";
-	postSignature = "";
+	// ------------------------------------------------------ //
+	// ------------------------------------------------------ //
+
+
+	// The policy will be posted along with the FORM post as a
+	// hidden form field. Serialize it as JavaScript Object notation.
+	serializedPolicy = serializeJson( policy );
+
+	// Remove up the line breaks.
+	serializedPolicy = reReplace( serializedPolicy, "[\r\n]+", "", "all" );
+
+	// Encode the policy as Base64 so that it doesn't mess up
+	// the form post data at all.
+	encodedPolicy = binaryEncode(
+		charsetDecode( serializedPolicy, "utf-8" ) ,
+		"base64"
+	);
+
+
+	// ------------------------------------------------------ //
+	// ------------------------------------------------------ //
+
+
+	// To make sure that no one tampers with the FORM POST, create
+	// hashed message authentication code of the policy content.
+	// NOTE: The hmac() function was added in ColdFusion 10.
+	hashedPolicy = hmac(
+		encodedPolicy,
+		aws.secretKey,
+		"HmacSHA1",
+		"utf-8"
+	);
+
+	// Encode the message authentication code in Base64.
+	encodedSignature = binaryEncode(
+		binaryDecode( hashedPolicy, "hex" ),
+		"base64"
+	);
 
 
 </cfscript>
@@ -40,7 +103,7 @@
 <!--- ----------------------------------------------------- --->
 
 
-<!--- Reset the output buffer and define the character encoding of the page. --->
+<!--- Reset the output buffer and set the page encoding. --->
 <cfcontent type="text/html; charset=utf-8" />
 
 <cfoutput>
@@ -105,7 +168,7 @@
 					runtimes: "html5,flash",
 
 					// The upload URL.
-					url: 'http://#request.s3.bucket#.s3.amazonaws.com/',
+					url: 'http://#aws.bucket#.s3.amazonaws.com/',
 
 					// The ID of the drop-zone element.
 					drop_element: "uploader",
@@ -124,7 +187,7 @@
 					// engine for browsers that don't support HTML5.
 					flash_swf_url: "./assets/plupload/js/plupload.flash.swf",
 
-					unique_names: true,
+					//unique_names: true,
 
 					// The name of the form-field that will hold the upload data.
 					file_data_name: "file",
@@ -132,18 +195,18 @@
 					multipart: true,
 
 					multipart_params: {
-						"key": "form-uploads/${filename}",
-						"Filename": "${filename}", 		// Adding this to keep consistency across the runtimes.
-						"acl": "private",
+						"acl": "public-read",
+						// "success_action_redirect": "#htmlEditFormat( successUrl )#",
+						"success_action_status": "201 Created",
+						"key": "pluploads/${filename}",
+						"Filename": "pluploads/${filename}",
 						"Content-Type": "image/*",
-						"success_action_status": "201",
-						"AWSAccessKeyId" : "#request.s3.accessID#",
-						"policy": "#postPolicy#",
-						"signature": "#postSignature#"
+						"AWSAccessKeyId" : "#aws.accessID#",
+						"policy": "#encodedPolicy#",
+						"signature": "#encodedSignature#"
 					},
 
 					max_file_size : "10mb" // 10485760 bytes
-
 				});
 
 
@@ -158,8 +221,6 @@
 				uploader.init();
 
 
-
-
 				function handlePluploadInit( uploader, params ) {
 
 
@@ -167,7 +228,8 @@
 
 
 				function handlePluploadError() {
-
+					console.log( "Error" );
+					console.dir( arguments );
 				}
 
 
@@ -188,12 +250,13 @@
 
 
 				function handlePluploadUploadProgress( uploader, file ) {
-
 				}
 
 
 				function handlePluploadFileUploaded( uploader, file, response ) {
-
+					console.log( "File Uploaded" );
+					console.dir( response );
+					console.dir( arguments );
 				}
 
 				

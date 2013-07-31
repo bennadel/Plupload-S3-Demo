@@ -1,3 +1,3 @@
 
-# Ignore the config file  (where I keep my private Amazon S3 configuration data).
-s3.config
+# Ignore the Amazon Web Services (AWS) credentials file.
+aws-credentials.cfm

@@ -10,21 +10,4 @@ component
 	this.sessionManagement = false;
 
 
-	public boolean function onRequestStart( required string script ) {
-
-		// {
-		// 	"bucket": "***",
-		// 	"accessID": "***",
-		// 	"secretKey": "***"
-		// }
-
-		var config = fileRead( expandPath( "./s3.config" ) );
-
-		request.s3 = deserializeJson( config );
-
-		return( true );
-
-	}
-
-
 }
