@@ -239,6 +239,7 @@
 				uploader.bind( "Error", handlePluploadError );
 				uploader.bind( "FilesAdded", handlePluploadFilesAdded );
 				uploader.bind( "QueueChanged", handlePluploadQueueChanged );
+				uploader.bind( "BeforeUpload", handlePluploadBeforeUpload );
 				uploader.bind( "UploadProgress", handlePluploadUploadProgress );
 				uploader.bind( "FileUploaded", handlePluploadFileUploaded );
 				uploader.bind( "StateChanged", handlePluploadStateChanged );
@@ -251,6 +252,27 @@
 
 				// ------------------------------------------ //
 				// ------------------------------------------ //
+
+
+				// I handle the before upload event where the meta data
+				// can be edited right before the upload of a specific
+				// file, allowing for per-file Amazon S3 settings.
+				function handlePluploadBeforeUpload( uploader, file ) {
+					
+					console.log( "File upload about to start." );
+
+					// Generate a "unique" key based on the file ID
+					// that Plupload has assigned. This way, we can
+					// create a non-colliding directory, but keep
+					// the original file name from the client.
+					var uniqueKey = ( "pluploads/" + file.id + "/" + file.name );
+
+					// Update the Key and Filename so that Amazon S3
+					// will store the resource with the correct value.
+					uploader.settings.multipart_params.key = uniqueKey;
+					uploader.settings.multipart_params.Filename = uniqueKey;
+
+				}
 
 
 				// I handle the init event. At this point, we will know
@@ -319,9 +341,15 @@
 					var li = $( "<li><img /></li>" );
 					var img = li.find( "img" );
 
+					// When passing the uploaded Key back to the 
+					// success page, we have to be sure to fullly
+					// encode the key so that it doesn't confuse 
+					// any other parts of the normal URL component
+					// system (ex. hashes in a filename can be 
+					// misinterpreted as the URL hash).
 					img.prop(
 						"src",
-						( "./success.cfm?key=" + resourceData.key )
+						( "./success.cfm?key=" + encodeURIComponent( resourceData.key ) )
 					);
 
 					dom.uploads.prepend( li );

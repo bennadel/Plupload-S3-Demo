@@ -18,10 +18,13 @@
 	// NOTE: This values will NOT start with a leading slash.
 	param name="url.key" type="string";
 
+	// Since the key may have characters that required url-encoding,
+	// we have to re-encode the key or our signature may not match.
+	urlEncodedKey = urlEncodedFormat( url.key );
 
 	// Now that we have the resource, we can construct a full URL
 	// and generate a pre-signed, authorized URL.
-	resource = ( "/" & aws.bucket & "/" & url.key );
+	resource = ( "/" & aws.bucket & "/" & urlEncodedKey );
 
 	// The expiration is defined as the number of seconds since
 	// epoch - as such, we need to figure out what our local timezone
