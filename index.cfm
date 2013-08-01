@@ -207,7 +207,10 @@
 					// Needed for the Flash environment to work.
 					urlstream_upload: true,
 
-					// NOTE: I couldn't get unique names to work...
+					// NOTE: Unique names doesn't work with Amazon S3
+					// and Plupload - see the BeforeUpload event to see
+					// how we can generate unique file names.
+
 					// unique_names: true,
 
 					// The name of the form-field that will hold the 
@@ -219,6 +222,13 @@
 
 					// Pass through all the values needed by the Policy 
 					// and the authentication of the request.
+					// --
+					// NOTE: We are using the special value, ${filename}
+					// in our param definitions; but, we are actually 
+					// overriding these in the BeforeUpload event. This
+					// notation is used when you do NOT know the name 
+					// of the file that is about to be uploaded (and
+					// therefore cannot define it explicitly).
 					multipart_params: {
 						"acl": "private",
 						"success_action_status": "201",
@@ -254,6 +264,30 @@
 				// ------------------------------------------ //
 
 
+				// I return the content type based on the filename.
+				function getContentTypeFromFilename( name ) {
+
+					if ( /\.jpe?g$/i.test( name ) ) {
+
+						return( "image/jpg" );
+
+					} else if ( /\.png/i.test( name ) ) {
+
+						return( "image/png" );
+
+					} else if ( /\.gif/i.test( name ) ) {
+
+						return( "image/gif" );
+
+					}
+
+					// If none of the known image types match, then 
+					// just use the default octet-stream.
+					return( "application/octet-stream" );
+
+				}
+
+
 				// I handle the before upload event where the meta data
 				// can be edited right before the upload of a specific
 				// file, allowing for per-file Amazon S3 settings.
@@ -282,7 +316,7 @@
 
 					console.log( "Initialization complete." );
 
-					console.log( "Drag-drop supported:", !! uploader.features.dragdrop );
+					console.info( "Drag-drop supported:", !! uploader.features.dragdrop );
 
 				}
 
@@ -290,7 +324,7 @@
 				// I handle any errors raised during uploads.
 				function handlePluploadError() {
 					
-					console.log( "Error during upload." );
+					console.warn( "Error during upload." );
 
 				}
 
@@ -298,9 +332,22 @@
 				// I handle the files-added event. This is different
 				// that the queue-changed event. At this point, we 
 				// have an opportunity to reject files from the queue.
-				function handlePluploadFilesAdded() {
+				function handlePluploadFilesAdded( uploader, files ) {
 
 					console.log( "Files selected." );
+
+					// Make sure we filter OUT any non-image files.
+					for ( var i = ( files.length - 1 ) ; i >=0 ; i-- ) {
+
+						if ( ! isImageFile( files[ i ] ) ) {
+
+							console.warn( "Rejecting non-image file." );
+
+							files.splice( i, 1 );
+
+						}
+
+					}
 
 				}
 
@@ -324,7 +371,7 @@
 				// upload queue.
 				function handlePluploadUploadProgress( uploader, file ) {
 
-					console.log( "Upload progress:", file.percent );
+					console.info( "Upload progress:", file.percent );
 
 					dom.percent.text( file.percent );
 
@@ -369,6 +416,20 @@
 						dom.uploader.removeClass( "uploading" );
 
 					}
+
+				}
+
+
+				// I determine if the given file is an image file.
+				// --
+				// NOTE: Our policy requires us to send image files.
+				function isImageFile( file ) {
+
+					var contentType = getContentTypeFromFilename( file.name );
+
+					// Make sure the content type starts with the
+					// image super-type.
+					return( /^image\//i.test( contentType ) );
 
 				}
 				
